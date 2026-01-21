@@ -1,0 +1,375 @@
+const Database = require('better-sqlite3');
+const path = require('path');
+
+const db = new Database(path.join(__dirname, '..', 'data', 'bot.db'));
+
+// SPEED OPTIMIZATIONS
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('cache_size = 10000');
+db.pragma('temp_store = MEMORY');
+
+// Initialize database schema
+db.exec(`
+    CREATE TABLE IF NOT EXISTS guilds (
+        guild_id TEXT PRIMARY KEY,
+        prefix TEXT DEFAULT '!',
+        panel_url TEXT,
+        server_ip TEXT,
+        store_url TEXT,
+        autorole_user TEXT,
+        autorole_bot TEXT,
+        vcban_role TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS staff_roles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        permission_level INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, role_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS staff_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        permission_level INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS warnings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        moderator_id TEXT NOT NULL,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS modlogs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        moderator_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT,
+        duration TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+
+    CREATE TABLE IF NOT EXISTS sticky_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL UNIQUE,
+        message_id TEXT,
+        content TEXT NOT NULL,
+        is_embed INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS autoresponders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        trigger_word TEXT NOT NULL,
+        response TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, trigger_word)
+    );
+
+    CREATE TABLE IF NOT EXISTS autoreacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        trigger_word TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, trigger_word)
+    );
+
+    CREATE TABLE IF NOT EXISTS automod_settings (
+        guild_id TEXT PRIMARY KEY,
+        block_links INTEGER DEFAULT 0,
+        block_invites INTEGER DEFAULT 0,
+        block_spam INTEGER DEFAULT 0,
+        block_mass_emoji INTEGER DEFAULT 0,
+        block_mass_mentions INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS blacklist_words (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        word TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, word)
+    );
+
+    CREATE TABLE IF NOT EXISTS blacklist_bypass (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS vcbans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        moderator_id TEXT NOT NULL,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS vcmute_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_warnings_guild_user ON warnings(guild_id, user_id);
+    CREATE INDEX IF NOT EXISTS idx_modlogs_guild_user ON modlogs(guild_id, user_id);
+    CREATE INDEX IF NOT EXISTS idx_staff_roles_guild ON staff_roles(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_staff_users_guild ON staff_users(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_blacklist_guild ON blacklist_words(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_vcbans_guild ON vcbans(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_autoresponders_guild ON autoresponders(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_autoreacts_guild ON autoreacts(guild_id);
+
+    -- Temp VC System
+    CREATE TABLE IF NOT EXISTS tempvc_settings (
+        guild_id TEXT PRIMARY KEY,
+        category_id TEXT,
+        join_channel_id TEXT,
+        interface_channel_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS active_temp_vcs (
+        channel_id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        is_locked INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_active_temp_vcs_owner ON active_temp_vcs(owner_id);
+
+    -- Ticket System
+    CREATE TABLE IF NOT EXISTS ticket_settings (
+        guild_id TEXT PRIMARY KEY,
+        category_id TEXT,
+        transcripts_channel_id TEXT,
+        staff_role_id TEXT,
+        panel_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS tickets (
+        channel_id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        status TEXT DEFAULT 'open', -- open, closed
+        topic TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tickets_guild ON tickets(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);
+`);
+
+// Migration for existing databases
+try { db.exec('ALTER TABLE sticky_messages ADD COLUMN is_embed INTEGER DEFAULT 1'); } catch { }
+
+// ============ IN-MEMORY CACHE FOR SPEED ============
+const cache = {
+    guilds: new Map(),
+    automod: new Map(),
+    autoresponders: new Map(),
+    autoreacts: new Map(),
+    blacklist: new Map(),
+    sticky: new Map(),
+    vcmute: new Map(),
+    tempvc_settings: new Map(),
+    active_temp_vcs: new Map(),
+    ticket_settings: new Map(),
+    TTL: 60000
+};
+
+function getCached(map, key, fn) {
+    const c = map.get(key);
+    if (c && Date.now() - c.t < cache.TTL) return c.d;
+    const d = fn();
+    map.set(key, { d, t: Date.now() });
+    return d;
+}
+
+function clearCache(guildId) {
+    cache.guilds.delete(guildId);
+    cache.automod.delete(guildId);
+    cache.autoresponders.delete(guildId);
+    cache.autoreacts.delete(guildId);
+    cache.blacklist.delete(guildId);
+    cache.tempvc_settings.delete(guildId);
+    cache.ticket_settings.delete(guildId);
+    // Note: active_temp_vcs are by channel_id, so we can't easily clear by guild_id without iteration, 
+    // but they expire by TTL anyway or explicit removal.
+}
+
+// ============ PREPARED STATEMENTS ============
+const stmts = {
+    getGuild: db.prepare('SELECT * FROM guilds WHERE guild_id = ?'),
+    upsertGuild: db.prepare(`INSERT INTO guilds (guild_id, prefix, panel_url, server_ip, store_url) VALUES (?, ?, ?, ?, ?) ON CONFLICT(guild_id) DO UPDATE SET prefix = excluded.prefix, panel_url = excluded.panel_url, server_ip = excluded.server_ip, store_url = excluded.store_url`),
+    setAutoroleUser: db.prepare('INSERT INTO guilds (guild_id, autorole_user) VALUES (?, ?) ON CONFLICT(guild_id) DO UPDATE SET autorole_user = excluded.autorole_user'),
+    setAutoroleBot: db.prepare('INSERT INTO guilds (guild_id, autorole_bot) VALUES (?, ?) ON CONFLICT(guild_id) DO UPDATE SET autorole_bot = excluded.autorole_bot'),
+    setVcbanRole: db.prepare('INSERT INTO guilds (guild_id, vcban_role) VALUES (?, ?) ON CONFLICT(guild_id) DO UPDATE SET vcban_role = excluded.vcban_role'),
+
+    addStaffRole: db.prepare('INSERT OR REPLACE INTO staff_roles (guild_id, role_id, permission_level) VALUES (?, ?, ?)'),
+    removeStaffRole: db.prepare('DELETE FROM staff_roles WHERE guild_id = ? AND role_id = ?'),
+    getStaffRoles: db.prepare('SELECT * FROM staff_roles WHERE guild_id = ?'),
+    addStaffUser: db.prepare('INSERT OR REPLACE INTO staff_users (guild_id, user_id, permission_level) VALUES (?, ?, ?)'),
+    removeStaffUser: db.prepare('DELETE FROM staff_users WHERE guild_id = ? AND user_id = ?'),
+    getStaffUsers: db.prepare('SELECT * FROM staff_users WHERE guild_id = ?'),
+
+    addWarning: db.prepare('INSERT INTO warnings (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)'),
+    getWarnings: db.prepare('SELECT * FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC'),
+
+    addModlog: db.prepare('INSERT INTO modlogs (guild_id, user_id, moderator_id, action, reason, duration) VALUES (?, ?, ?, ?, ?, ?)'),
+    getModlogs: db.prepare('SELECT * FROM modlogs WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 20'),
+    getModlogCounts: db.prepare('SELECT action, COUNT(*) as count FROM modlogs WHERE guild_id = ? AND user_id = ? GROUP BY action'),
+
+    setSticky: db.prepare('INSERT OR REPLACE INTO sticky_messages (guild_id, channel_id, message_id, content, is_embed) VALUES (?, ?, ?, ?, ?)'),
+    getSticky: db.prepare('SELECT * FROM sticky_messages WHERE channel_id = ?'),
+    removeSticky: db.prepare('DELETE FROM sticky_messages WHERE channel_id = ?'),
+    updateStickyMessageId: db.prepare('UPDATE sticky_messages SET message_id = ? WHERE channel_id = ?'),
+
+    addAutoresponder: db.prepare('INSERT OR REPLACE INTO autoresponders (guild_id, trigger_word, response) VALUES (?, ?, ?)'),
+    removeAutoresponder: db.prepare('DELETE FROM autoresponders WHERE guild_id = ? AND trigger_word = ?'),
+    getAutoresponders: db.prepare('SELECT * FROM autoresponders WHERE guild_id = ?'),
+
+    addAutoreact: db.prepare('INSERT OR REPLACE INTO autoreacts (guild_id, trigger_word, emoji) VALUES (?, ?, ?)'),
+    removeAutoreact: db.prepare('DELETE FROM autoreacts WHERE guild_id = ? AND trigger_word = ?'),
+    getAutoreacts: db.prepare('SELECT * FROM autoreacts WHERE guild_id = ?'),
+
+    getAutomod: db.prepare('SELECT * FROM automod_settings WHERE guild_id = ?'),
+    setAutomod: db.prepare(`INSERT INTO automod_settings (guild_id, block_links, block_invites, block_spam, block_mass_emoji, block_mass_mentions) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id) DO UPDATE SET block_links = excluded.block_links, block_invites = excluded.block_invites, block_spam = excluded.block_spam, block_mass_emoji = excluded.block_mass_emoji, block_mass_mentions = excluded.block_mass_mentions`),
+
+    addBlacklistWord: db.prepare('INSERT OR IGNORE INTO blacklist_words (guild_id, word) VALUES (?, ?)'),
+    removeBlacklistWord: db.prepare('DELETE FROM blacklist_words WHERE guild_id = ? AND word = ?'),
+    getBlacklistWords: db.prepare('SELECT * FROM blacklist_words WHERE guild_id = ?'),
+    addBlacklistBypass: db.prepare('INSERT OR IGNORE INTO blacklist_bypass (guild_id, user_id) VALUES (?, ?)'),
+    removeBlacklistBypass: db.prepare('DELETE FROM blacklist_bypass WHERE guild_id = ? AND user_id = ?'),
+    isBlacklistBypassed: db.prepare('SELECT * FROM blacklist_bypass WHERE guild_id = ? AND user_id = ?'),
+    getBlacklistBypass: db.prepare('SELECT * FROM blacklist_bypass WHERE guild_id = ?'),
+
+    addVcban: db.prepare('INSERT OR REPLACE INTO vcbans (guild_id, user_id, moderator_id, reason) VALUES (?, ?, ?, ?)'),
+    removeVcban: db.prepare('DELETE FROM vcbans WHERE guild_id = ? AND user_id = ?'),
+    getVcban: db.prepare('SELECT * FROM vcbans WHERE guild_id = ? AND user_id = ?'),
+    getVcbans: db.prepare('SELECT * FROM vcbans WHERE guild_id = ?'),
+    clearVcbans: db.prepare('DELETE FROM vcbans WHERE guild_id = ?'),
+
+    addVcmuteChannel: db.prepare('INSERT OR IGNORE INTO vcmute_channels (guild_id, channel_id) VALUES (?, ?)'),
+    removeVcmuteChannel: db.prepare('DELETE FROM vcmute_channels WHERE channel_id = ?'),
+    getVcmuteChannel: db.prepare('SELECT * FROM vcmute_channels WHERE channel_id = ?'),
+
+    // Temp VC
+    setTempVcSettings: db.prepare('INSERT OR REPLACE INTO tempvc_settings (guild_id, category_id, join_channel_id, interface_channel_id) VALUES (?, ?, ?, ?)'),
+    getTempVcSettings: db.prepare('SELECT * FROM tempvc_settings WHERE guild_id = ?'),
+    addActiveTempVc: db.prepare('INSERT OR REPLACE INTO active_temp_vcs (channel_id, guild_id, owner_id) VALUES (?, ?, ?)'),
+    removeActiveTempVc: db.prepare('DELETE FROM active_temp_vcs WHERE channel_id = ?'),
+    getActiveTempVc: db.prepare('SELECT * FROM active_temp_vcs WHERE channel_id = ?'),
+    getAllActiveTempVcs: db.prepare('SELECT * FROM active_temp_vcs'),
+    updateTempVcOwner: db.prepare('UPDATE active_temp_vcs SET owner_id = ? WHERE channel_id = ?'),
+    updateTempVcLock: db.prepare('UPDATE active_temp_vcs SET is_locked = ? WHERE channel_id = ?'),
+
+    // Ticket System
+    setTicketSettings: db.prepare('INSERT OR REPLACE INTO ticket_settings (guild_id, category_id, transcripts_channel_id, staff_role_id, panel_json) VALUES (?, ?, ?, ?, ?)'),
+    getTicketSettings: db.prepare('SELECT * FROM ticket_settings WHERE guild_id = ?'),
+    addTicket: db.prepare('INSERT OR REPLACE INTO tickets (channel_id, guild_id, user_id, status, topic) VALUES (?, ?, ?, ?, ?)'),
+    getTicket: db.prepare('SELECT * FROM tickets WHERE channel_id = ?'),
+    getUserTickets: db.prepare('SELECT * FROM tickets WHERE user_id = ? AND guild_id = ? AND status = ?'),
+    updateTicketStatus: db.prepare('UPDATE tickets SET status = ? WHERE channel_id = ?'),
+    removeTicket: db.prepare('DELETE FROM tickets WHERE channel_id = ?')
+};
+
+// Wrapper with caching for frequently accessed data
+const statements = {
+    // Cached getters (messageCreate uses these a lot)
+    getGuild: { get: (id) => getCached(cache.guilds, id, () => stmts.getGuild.get(id)) },
+    getAutomod: { get: (id) => getCached(cache.automod, id, () => stmts.getAutomod.get(id)) },
+    getAutoresponders: { all: (id) => getCached(cache.autoresponders, id, () => stmts.getAutoresponders.all(id)) },
+    getAutoreacts: { all: (id) => getCached(cache.autoreacts, id, () => stmts.getAutoreacts.all(id)) },
+    getBlacklistWords: { all: (id) => getCached(cache.blacklist, id, () => stmts.getBlacklistWords.all(id)) },
+    getSticky: { get: (id) => getCached(cache.sticky, id, () => stmts.getSticky.get(id)) },
+    getVcmuteChannel: { get: (id) => getCached(cache.vcmute, id, () => stmts.getVcmuteChannel.get(id)) },
+
+    // Write operations (clear cache)
+    upsertGuild: { run: (...a) => { clearCache(a[0]); return stmts.upsertGuild.run(...a); } },
+    setAutoroleUser: { run: (...a) => { clearCache(a[0]); return stmts.setAutoroleUser.run(...a); } },
+    setAutoroleBot: { run: (...a) => { clearCache(a[0]); return stmts.setAutoroleBot.run(...a); } },
+    setVcbanRole: { run: (...a) => { clearCache(a[0]); return stmts.setVcbanRole.run(...a); } },
+    setAutomod: { run: (...a) => { cache.automod.delete(a[0]); return stmts.setAutomod.run(...a); } },
+    setSticky: { run: (...a) => { cache.sticky.delete(a[1]); return stmts.setSticky.run(...a); } },
+    removeSticky: { run: (id) => { cache.sticky.delete(id); return stmts.removeSticky.run(id); } },
+    updateStickyMessageId: { run: (...a) => { cache.sticky.delete(a[1]); return stmts.updateStickyMessageId.run(...a); } },
+    addAutoresponder: { run: (...a) => { cache.autoresponders.delete(a[0]); return stmts.addAutoresponder.run(...a); } },
+    removeAutoresponder: { run: (...a) => { cache.autoresponders.delete(a[0]); return stmts.removeAutoresponder.run(...a); } },
+    addAutoreact: { run: (...a) => { cache.autoreacts.delete(a[0]); return stmts.addAutoreact.run(...a); } },
+    removeAutoreact: { run: (...a) => { cache.autoreacts.delete(a[0]); return stmts.removeAutoreact.run(...a); } },
+    addBlacklistWord: { run: (...a) => { cache.blacklist.delete(a[0]); return stmts.addBlacklistWord.run(...a); } },
+    removeBlacklistWord: { run: (...a) => { cache.blacklist.delete(a[0]); return stmts.removeBlacklistWord.run(...a); } },
+    addVcmuteChannel: { run: (...a) => { cache.vcmute.delete(a[1]); return stmts.addVcmuteChannel.run(...a); } },
+    removeVcmuteChannel: { run: (id) => { cache.vcmute.delete(id); return stmts.removeVcmuteChannel.run(id); } },
+
+    // Direct passthrough (not cached)
+    addStaffRole: stmts.addStaffRole,
+    removeStaffRole: stmts.removeStaffRole,
+    getStaffRoles: stmts.getStaffRoles,
+    addStaffUser: stmts.addStaffUser,
+    removeStaffUser: stmts.removeStaffUser,
+    getStaffUsers: stmts.getStaffUsers,
+    addWarning: stmts.addWarning,
+    getWarnings: stmts.getWarnings,
+    addModlog: stmts.addModlog,
+    getModlogs: stmts.getModlogs,
+    getModlogCounts: stmts.getModlogCounts,
+    isBlacklistBypassed: stmts.isBlacklistBypassed,
+    getBlacklistBypass: stmts.getBlacklistBypass,
+    addBlacklistBypass: stmts.addBlacklistBypass,
+    removeBlacklistBypass: stmts.removeBlacklistBypass,
+    addVcban: stmts.addVcban,
+    removeVcban: stmts.removeVcban,
+    getVcban: stmts.getVcban,
+    getVcbans: stmts.getVcbans,
+    clearVcbans: stmts.clearVcbans,
+
+    // Temp VC
+    setTempVcSettings: { run: (...a) => { cache.tempvc_settings.delete(a[0]); return stmts.setTempVcSettings.run(...a); } },
+    getTempVcSettings: { get: (id) => getCached(cache.tempvc_settings, id, () => stmts.getTempVcSettings.get(id)) },
+
+    addActiveTempVc: { run: (...a) => { cache.active_temp_vcs.delete(a[0]); return stmts.addActiveTempVc.run(...a); } },
+    removeActiveTempVc: { run: (id) => { cache.active_temp_vcs.delete(id); return stmts.removeActiveTempVc.run(id); } },
+    getActiveTempVc: { get: (id) => getCached(cache.active_temp_vcs, id, () => stmts.getActiveTempVc.get(id)) },
+    getAllActiveTempVcs: { all: () => stmts.getAllActiveTempVcs.all() },
+
+    updateTempVcOwner: { run: (...a) => { cache.active_temp_vcs.delete(a[1]); return stmts.updateTempVcOwner.run(...a); } },
+    updateTempVcLock: { run: (...a) => { cache.active_temp_vcs.delete(a[1]); return stmts.updateTempVcLock.run(...a); } },
+
+    // Ticket System
+    setTicketSettings: { run: (...a) => { cache.ticket_settings.delete(a[0]); return stmts.setTicketSettings.run(...a); } },
+    getTicketSettings: { get: (id) => getCached(cache.ticket_settings, id, () => stmts.getTicketSettings.get(id)) },
+
+    addTicket: stmts.addTicket,
+    getTicket: stmts.getTicket,
+    getUserTickets: stmts.getUserTickets,
+    updateTicketStatus: stmts.updateTicketStatus,
+    removeTicket: stmts.removeTicket
+};
+
+module.exports = { db, statements, clearCache };
