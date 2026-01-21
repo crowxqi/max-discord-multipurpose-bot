@@ -9,7 +9,7 @@
 [![Support Server](https://img.shields.io/badge/Discord-Support-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/586Ejd8M5Z)
 [![Sponsored By](https://img.shields.io/badge/Sponsored%20By-Arctic%20Nodes-00C7B7?style=for-the-badge)](https://arcticnodes.io/)
 
-[**Invite Bot**](https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&scope=bot%20applications.commands) • [**Support Server**](https://discord.gg/586Ejd8M5Z) • [**Report Bug**](https://discord.gg/586Ejd8M5Z)
+[**Support Server**](https://discord.gg/586Ejd8M5Z) • [**Report Bug**](https://discord.gg/586Ejd8M5Z)
 
 ---
 
