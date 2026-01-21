@@ -1,169 +1,125 @@
-# 🤖 Max (Multipurpose Discord Bot)
+<div align="center">
 
-![Node.js](https://img.shields.io/badge/Node.js-v24-green?style=for-the-badge&logo=node.js)
-![Discord.js](https://img.shields.io/badge/Discord.js-v14-blue?style=for-the-badge&logo=discord)
-[![Discord Support](https://img.shields.io/badge/Discord-Support-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/586Ejd8M5Z)
-![License](https://img.shields.io/badge/License-ISC-orange?style=for-the-badge)
+# 🤖 MAX
+### The Ultimate Multipurpose Discord Bot
+*Advanced Moderation • Ticketing System • Voice Recording • Temp Voice Channels*
 
-> **Max** is the ultimate all-in-one Discord bot featuring Advanced Tickets, Temporary Voice Channels, Voice Recording, and Robust Moderation.
->
-> 🚀 **Powered by [ArcticNodes.io](https://arcticnodes.io/)** - High Performance Game & Bot Hosting.
+[![Node.js](https://img.shields.io/badge/Node.js-v22+-green?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+[![Discord.js](https://img.shields.io/badge/Discord.js-v14-5865F2?style=for-the-badge&logo=discord)](https://discord.js.org/)
+[![Support Server](https://img.shields.io/badge/Discord-Support-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/586Ejd8M5Z)
+[![Sponsored By](https://img.shields.io/badge/Sponsored%20By-Arctic%20Nodes-00C7B7?style=for-the-badge)](https://arcticnodes.io/)
 
----
-
-## ✨ Credits
-- **Developer**: **[Raze](https://github.com/yourusername)**
-- **Hosting Partner**: **[ArcticNodes](https://arcticnodes.io/)**
-- **Support Server**: **[Join Community](https://discord.gg/586Ejd8M5Z)**
+[**Invite Bot**](https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&scope=bot%20applications.commands) • [**Support Server**](https://discord.gg/586Ejd8M5Z) • [**Report Bug**](https://discord.gg/586Ejd8M5Z)
 
 ---
 
-## ✨ Key Features
+### ⚡ Powered by [ArcticNodes.io](https://arcticnodes.io/)
+**High Performance Game & Bot Hosting Solutions**
 
-### 🎫 **Advanced Ticket System**
-- **Multi-Category Panels**: Create ticket panels with multiple options (Support, Billing, Report, etc.).
-- **HTML Transcripts**: Automatically generates and saves chat transcripts when tickets are closed.
-- **Claim System**: Staff can claim tickets to handle them exclusively.
-- **Custom Buttons**: Close, Close with Reason, and Claim buttons with emoji support.
-
-### 🔊 **Temporary Voice Channels (TempVC)**
-- **Join-to-Create**: Users join a hub channel to create their own private voice channel.
-- **Full Control Interface**: A control panel (embed + buttons) allows owners to:
-  - 🔒 **Lock/Unlock** the channel.
-  - 🚫 **Ban/Kick** users from the channel.
-  - 👑 **Transfer Ownership**.
-  - ✏️ **Rename** the channel.
-  - 🙈 **Hide/Unhide** the channel.
-
-### 🎙️ **Voice Recording**
-- **High-Quality Recording**: Record voice channels into WAV format.
-- **Auto-Upload**: Automatically uploads the recording file to the channel when stopped.
-- **Privacy Focus**: Clearly notifies users when recording starts/stops.
-- **Error Handling**: Robust stream management ensures no audio is lost even if the bot is stopped abruptly.
-
-### 🛡️ **Advanced Moderation**
-- **Complete Suite**: `ban`, `kick`, `mute` (timeout), `warn`, `unban`, `unmute`.
-- **Modlogs**: detailed logging of all moderation actions.
-- **Voice Moderation**: `vcban`, `vcmute`, `vcunban` specific to voice channels.
-- **Sticky Messages**: Pin messages to the bottom of channels.
-- **Lockdown**: Lock specific channels or the entire server (`lockall`).
-
-### 🤖 **Automation & Utility**
-- **Autoresponder**: Set up custom triggers and responses.
-- **Autoreact**: Automatically react to specific words with emojis.
-- **Automod**: Built-in protection against:
-  - anti-link
-  - anti-spam
-  - anti-mass-mention
-  - anti-invite
-- **Ticket Panel Setup**: Easy interactive setup command.
+</div>
 
 ---
+
+## 🌟 Features
+
+| 🛡️ **Advanced Moderation** | 🎫 **Ticket System** |
+| :--- | :--- |
+| Complete moderation suite including Ban, Kick, Mute, Warn, and detailed Modlogs to keep your server safe. | Multi-category ticket panels, HTML transcripts, and claiming system for professional support. |
+
+| 🎙️ **Voice Recording** | 🔊 **Temp Voice Channels** |
+| :--- | :--- |
+| High-quality voice recording with auto-upload features. Record meetings or gaming sessions effortlessly. | Join-to-Create system with a full control panel for users to manage their own private channels. |
 
 ## 🛠️ Commands List
 
 ### 👮 Admin & Configuration
 | Command | Description |
 | :--- | :--- |
-| `/automod` | Configure auto-moderation filters (links, spam, etc.). |
-| `/autoresponder` | Add/Remove custom text responses. |
-| `/autoreact` | Add/Remove custom emoji reactions. |
-| `/autorolebot` | Set role to give bots upon join. |
-| `/autoroleuser` | Set role to give users upon join. |
-| `/securechannel` | Configure channel security settings. |
-| `/setstaff` | Configure staff roles and permissions. |
-| `/sticky` | Create sticky messages that stay at the bottom. |
-| `/prefix` | Change the bot's prefix for non-slash commands. |
-| `/blacklist` | Manage blacklisted words. |
+| `/automod` | Configure auto-moderation filters (links, spam, mentions, invites). |
+| `/autoresponder` | Add/Remove custom trigger-response messages. |
+| `/autoreact` | Add/Remove automatic emoji reactions to keywords. |
+| `/autorolebot` | Set the role to automatically give to bots upon joining. |
+| `/autoroleuser` | Set the role to automatically give to users upon joining. |
+| `/blacklist` | Manage blacklisted words for the server. |
+| `/prefix` | Change the bot's prefix for legacy commands. |
+| `/securechannel` | Configure channel-specific security settings. |
+| `/setstaff` | Configure staff roles and administrative permissions. |
+| `/sticky` | Create sticky messages that stay at the bottom of a channel. |
 
 ### 🛡️ Moderation
 | Command | Description |
 | :--- | :--- |
-| `/ban` / `/unban` | Ban or Unban a user. |
-| `/kick` | Kick a user. |
-| `/mute` / `/unmute` | Timeout a user. |
-| `/warn` | Warn a user (dm + database log). |
-| `/warnlist` | View warnings for a user. |
-| `/modlog` | View moderation logs for a user. |
-| `/purge` | Bulk delete messages. |
-| `/lock` / `/unlock` | Lock/Unlock current channel. |
-| `/lockall` / `/unlockall` | Lockdown the entire server. |
-| `/slowmode` | Set channel slowmode. |
-| `/nuke` | Clone and delete a channel (clear all messages). |
-| `/vcban` / `/vcunban` | Ban/Unban user from ALL voice channels. |
+| `/ban` / `/unban` | Ban or Unban a user from the server. |
+| `/kick` | Kick a user from the server. |
+| `/mute` / `/unmute` | Timeout (mute) or remove timeout from a user. |
+| `/warn` | Issue a generic warning to a user (logged in database). |
+| `/warnlist` | View the active warnings for a specific user. |
+| `/modlog` | View the moderation history of a user. |
+| `/purge` | Bulk delete messages from a channel. |
+| `/lock` / `/unlock` | Lock or unlock the current channel. |
+| `/lockall` / `/unlockall` | Lockdown or unlock the entire server. |
+| `/slowmode` | Set the slowmode delay for a channel. |
+| `/nuke` | Clone and delete a channel (clears all history). |
+| `/vcban` / `/vcunban` | Ban or Unban a user from joining voice channels. |
+| `/vcbanlist` | View the list of users banned from voice channels. |
+| `/vcbansetup` | Setup the voice ban system. |
+| `/vcmuteall` | Server mute everyone in a voice channel. |
+| `/vcmuteoff` | Remove server mute from everyone in a voice channel. |
+| `/vcresetban` | Reset all voice bans. |
 
 ### 🔧 Utility & Systems
 | Command | Description |
 | :--- | :--- |
-| `/ticketsetup` | Interactive setup for ticket system. |
-| `/ticketpanel` | Create a fancy ticket panel message. |
-| `/tempvcsetup` | Setup the Join-to-Create voice system. |
-| `/invite` | Get bot invite link. |
-| `/help` | View all commands. |
+| `/ticketsetup` | Launch the interactive setup for the ticket system. |
+| `/ticketpanel` | Create and send a stylish ticket panel to a channel. |
+| `/tempvcsetup` | Setup the "Join to Create" temporary voice channel system. |
+| `/invite` | Get the invite link for the bot. |
+| `/help` | View this list of commands in Discord. |
 
-### 🎙️ Voice
+### 🎙️ Voice & Recording
 | Command | Description |
 | :--- | :--- |
-| `/record start` | Start recording audio in your voice channel. |
-| `/record stop` | Stop recording and upload the file. |
+| `/record start` | Start recording audio in your current voice channel. |
+| `/record stop` | Stop recording and process the audio file. |
 
 ---
 
-## 🚀 Installation Guide
+## 💻 Installation
 
 ### Prerequisites
-- Node.js v16.9.0 or newer (v24 recommended).
-- A Discord Bot Token (from [Discord Developer Portal](https://discord.com/developers/applications)).
+- [Node.js v20+](https://nodejs.org/)
+- [Discord Bot Token](https://discord.com/developers/applications)
+- [MongoDB/Database](https://www.mongodb.com/) (if applicable, or local JSON)
 
-### Setup Steps
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/garb-by-raze.git
-   cd garb-by-raze
-   ```
+### Quick Start
+```bash
+# 1. Clone the repository
+git clone https://github.com/crowxqi/max-discord-multipurpose-bot.git
 
-2. **Install Dependencies**
-   ```bash
-   npm install
-   ```
+# 2. Install dependencies
+npm install
 
-3. **Configure Environment**
-   - Rename `.env.example` to `.env`.
-   - Edit `.env` and fill in your details:
-     ```ini
-     DISCORD_TOKEN=your_token
-     OWNER_ID=your_id
-     DEFAULT_PREFIX=!
-     ```
+# 3. Configure environment
+# Rename .env.example to .env and fill in your details
 
-4. **Start the Bot**
-   ```bash
-   npm start
-   ```
-
-## 📂 Project Structure
+# 4. Start the bot
+npm run start
 ```
-garb-by-raze/
-├── src/
-│   ├── commands/     # Slash commands
-│   ├── events/       # Event listeners
-│   ├── handlers/     # Core logic (tickets, tempvc)
-│   ├── database/     # JSON-based Database Shim
-│   └── index.js      # Entry point
-├── data/             # Database storage
-├── recordings/       # Audio recordings
-├── .env              # Configuration secrets
-└── package.json      # Dependencies
-```
-
-## 📜 License
-Values protected under the **ISC License**.
-**Coded with ❤️ by Raze.**
 
 ---
+
 <div align="center">
-  <a href="https://arcticnodes.io/">
-    <h3>🚀 Sponsored by ArcticNodes.io</h3>
-  </a>
-  <p>Premium Hosting for Games, Bots, and Web.</p>
+
+## 👑 Credits & Support
+
+**Developer**
+<h3>Dev - Raze</h3>
+
+**Sponsored By**
+[![Arctic Nodes](https://cdn.discordapp.com/attachments/1089903906471927848/1199346654215573514/Arctic_Nodes_Banner.png)](https://arcticnodes.io/)
+
+[**Join our Support Server**](https://discord.gg/586Ejd8M5Z)
+
+<p>Copyright © 2026 Max Bot. All rights reserved.</p>
+
 </div>
