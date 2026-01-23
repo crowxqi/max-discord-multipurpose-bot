@@ -519,7 +519,7 @@ const statements = {
             cache.active_temp_vcs.delete(cid);
             const idx = db.data.active_temp_vcs.findIndex(a => a.channel_id === cid);
             if (idx >= 0) db.data.active_temp_vcs[idx] = { ...db.data.active_temp_vcs[idx], owner_id: owner };
-            else db.data.active_temp_vcs.push({ channel_id: cid, guild_id: gid, owner_id: owner, is_locked: 0 });
+            else db.data.active_temp_vcs.push({ channel_id: cid, guild_id: gid, owner_id: owner, is_locked: 0, trusted_users: [] });
             db.save();
         }
     },
@@ -544,6 +544,29 @@ const statements = {
             cache.active_temp_vcs.delete(cid);
             const a = db.data.active_temp_vcs.find(a => a.channel_id === cid);
             if (a) { a.is_locked = locked; db.save(); }
+        }
+    },
+    addTempVcTrust: {
+        run: (cid, uid) => {
+            cache.active_temp_vcs.delete(cid);
+            const a = db.data.active_temp_vcs.find(a => a.channel_id === cid);
+            if (a) {
+                if (!a.trusted_users) a.trusted_users = [];
+                if (!a.trusted_users.includes(uid)) {
+                    a.trusted_users.push(uid);
+                    db.save();
+                }
+            }
+        }
+    },
+    removeTempVcTrust: {
+        run: (cid, uid) => {
+            cache.active_temp_vcs.delete(cid);
+            const a = db.data.active_temp_vcs.find(a => a.channel_id === cid);
+            if (a && a.trusted_users) {
+                a.trusted_users = a.trusted_users.filter(id => id !== uid);
+                db.save();
+            }
         }
     },
 

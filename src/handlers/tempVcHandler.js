@@ -18,10 +18,19 @@ async function handleTempVcButton(interaction) {
     if (!tempVc) return interaction.reply({ embeds: [errorEmbed('Not a Temp VC.')], ephemeral: true });
 
     // Fast ownership check
+    // Fast ownership check
     const isOwner = tempVc.owner_id === member.id;
+    const isTrusted = tempVc.trusted_users && tempVc.trusted_users.includes(member.id);
     const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
-    if (customId !== 'tvc_claim' && !isOwner && !isAdmin) {
-        return interaction.reply({ embeds: [errorEmbed('You do not own this voice channel!')], ephemeral: true });
+
+    const ownerActions = ['tvc_delete', 'tvc_transfer', 'tvc_trust', 'tvc_untrust'];
+
+    if (customId !== 'tvc_claim') {
+        if (ownerActions.includes(customId)) {
+            if (!isOwner && !isAdmin) return interaction.reply({ embeds: [errorEmbed('Only the owner can do this!')], ephemeral: true });
+        } else {
+            if (!isOwner && !isAdmin && !isTrusted) return interaction.reply({ embeds: [errorEmbed('You do not have permission to control this voice channel!')], ephemeral: true });
+        }
     }
 
     // === HANDLERS ===
@@ -162,13 +171,19 @@ async function handleTempVcSelect(interaction) {
 
     // === TRUST (parallel) ===
     else if (customId === 'tvc_select_trust') {
-        Promise.all(values.map(uid => voiceChannel.permissionOverwrites.edit(uid, { Connect: true, ViewChannel: true, Speak: true }).catch(() => { })));
+        Promise.all(values.map(uid => {
+            voiceChannel.permissionOverwrites.edit(uid, { Connect: true, ViewChannel: true, Speak: true }).catch(() => { });
+            statements.addTempVcTrust.run(voiceChannel.id, uid);
+        }));
         return interaction.reply({ embeds: [successEmbed(`Trusted **${values.length}** users.`)], ephemeral: true });
     }
 
     // === UNTRUST (parallel) ===
     else if (customId === 'tvc_select_untrust') {
-        Promise.all(values.map(uid => voiceChannel.permissionOverwrites.delete(uid).catch(() => { })));
+        Promise.all(values.map(uid => {
+            voiceChannel.permissionOverwrites.delete(uid).catch(() => { });
+            statements.removeTempVcTrust.run(voiceChannel.id, uid);
+        }));
         return interaction.reply({ embeds: [new EmbedBuilder().setDescription(`🚫 Untrusted **${values.length}** users.`).setColor(0xFFA500)], ephemeral: true });
     }
 
