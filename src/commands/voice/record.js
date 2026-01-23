@@ -38,17 +38,23 @@ module.exports = {
             const recPath = path.join(__dirname, '..', '..', '..', 'recordings');
             if (!fs.existsSync(recPath)) fs.mkdirSync(recPath, { recursive: true });
 
-            // Map to store write streams per user
+            // Map to store active write streams/pipelines per user to prevent duplicate listeners
+            const activeRecordings = new Set();
+
             connection.receiver.speaking.on('start', (userId) => {
+                if (activeRecordings.has(userId)) return;
+
                 console.log(`🗣️ User ${userId} started speaking.`);
 
-                // Let's create a stream for this user
+                // Subscribe to the audio stream
                 const opusStream = connection.receiver.subscribe(userId, {
                     end: {
                         behavior: EndBehaviorType.AfterSilence,
                         duration: 1000,
                     },
                 });
+
+                activeRecordings.add(userId);
 
                 const rawStream = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
                 const filename = path.join(recPath, `${userId}-${Date.now()}.pcm`);
@@ -57,9 +63,10 @@ module.exports = {
                 console.log(`🎙️ Recording to ${filename}`);
 
                 pipeline(opusStream, rawStream, out, (err) => {
+                    activeRecordings.delete(userId); // Mark as finished so we can record next utterance
                     if (err) {
                         if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
-                            // This is expected when stopping recording abruptly
+                            // Expected when stopping recording forcefully
                             console.log(`✅ Recording stopped for ${userId}`);
                         } else {
                             console.error(`❌ Error recording ${userId}:`, err);
@@ -71,10 +78,11 @@ module.exports = {
             });
 
             connection.receiver.speaking.on('end', (userId) => {
-                console.log(`🤫 User ${userId} stopped speaking.`);
+                // Just log it. The stream handles the actual end via EndBehavior.
+                console.log(`🤫 User ${userId} stopped speaking (or paused).`);
             });
 
-            return interaction.reply({ content: `🎙️ Started recording in <#${member.voice.channel.id}>.` });
+            return interaction.reply({ content: `🎙️ Started recording in <#${member.voice.channel.id}>. \n**Note:** If you see DAVE protocol errors in console, please reinstall dependencies.` });
 
         } else if (sub === 'stop') {
             const connection = getVoiceConnection(guild.id);
