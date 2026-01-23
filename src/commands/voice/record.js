@@ -18,7 +18,14 @@ module.exports = {
         const member = interaction.member;
         const guild = interaction.guild;
 
+        // Module-level manager for recording sessions to prevent duplicate listeners
+        if (!global.recordingSessions) global.recordingSessions = new Map();
+
         if (sub === 'start') {
+            if (global.recordingSessions.has(guild.id)) {
+                return interaction.reply({ content: '❌ Already recording in this server! Stop the current recording first.', ephemeral: true });
+            }
+
             if (!member.voice.channel) return interaction.reply({ content: '❌ You must be in a voice channel!', ephemeral: true });
 
             const connection = joinVoiceChannel({
@@ -29,20 +36,15 @@ module.exports = {
                 selfMute: false
             });
 
-            // Debug Connection
-            connection.on(VoiceConnectionStatus.Ready, () => {
-                console.log('✅ Bot connected to voice channel!');
-            });
+            // State for this session
+            const sessionState = {
+                activeUsers: new Set(),
+                listener: null
+            };
 
-            // Clean up previous recordings
-            const recPath = path.join(__dirname, '..', '..', '..', 'recordings');
-            if (!fs.existsSync(recPath)) fs.mkdirSync(recPath, { recursive: true });
-
-            // Map to store active write streams/pipelines per user to prevent duplicate listeners
-            const activeRecordings = new Set();
-
-            connection.receiver.speaking.on('start', (userId) => {
-                if (activeRecordings.has(userId)) return;
+            // Define listener function reference for removal later
+            const speakingListener = (userId) => {
+                if (sessionState.activeUsers.has(userId)) return;
 
                 console.log(`🗣️ User ${userId} started speaking.`);
 
@@ -54,7 +56,10 @@ module.exports = {
                     },
                 });
 
-                activeRecordings.add(userId);
+                sessionState.activeUsers.add(userId);
+
+                const recPath = path.join(__dirname, '..', '..', '..', 'recordings');
+                if (!fs.existsSync(recPath)) fs.mkdirSync(recPath, { recursive: true });
 
                 const rawStream = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
                 const filename = path.join(recPath, `${userId}-${Date.now()}.pcm`);
@@ -63,11 +68,10 @@ module.exports = {
                 console.log(`🎙️ Recording to ${filename}`);
 
                 pipeline(opusStream, rawStream, out, (err) => {
-                    activeRecordings.delete(userId); // Mark as finished so we can record next utterance
+                    sessionState.activeUsers.delete(userId);
                     if (err) {
                         if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
-                            // Expected when stopping recording forcefully
-                            console.log(`✅ Recording stopped for ${userId}`);
+                            // Expected interaction
                         } else {
                             console.error(`❌ Error recording ${userId}:`, err);
                         }
@@ -75,28 +79,44 @@ module.exports = {
                         console.log(`✅ Segment saved: ${filename}`);
                     }
                 });
-            });
+            };
 
+            sessionState.listener = speakingListener;
+            connection.receiver.speaking.on('start', speakingListener);
+
+            // Save session
+            global.recordingSessions.set(guild.id, sessionState);
+
+            // Log clean end
             connection.receiver.speaking.on('end', (userId) => {
-                // Just log it. The stream handles the actual end via EndBehavior.
-                console.log(`🤫 User ${userId} stopped speaking (or paused).`);
+                // console.log(`🤫 User ${userId} stopped speaking.`);
             });
 
-            return interaction.reply({ content: `🎙️ Started recording in <#${member.voice.channel.id}>. \n**Note:** If you see DAVE protocol errors in console, please reinstall dependencies.` });
+            return interaction.reply({ content: `🎙️ Started recording in <#${member.voice.channel.id}>. \n**Note:** Audio is split by silence. You may receive multiple files.` });
 
         } else if (sub === 'stop') {
             const connection = getVoiceConnection(guild.id);
-            if (!connection) return interaction.reply({ content: '❌ Not recording!', ephemeral: true });
+            if (!connection) {
+                global.recordingSessions.delete(guild.id);
+                return interaction.reply({ content: '❌ Not recording!', ephemeral: true });
+            }
 
             await interaction.reply({ content: '✅ Stopping recording... processing files.' });
 
-            // Give streams a moment to close flushing data
+            // Cleanup listener to prevent leaks
+            const session = global.recordingSessions.get(guild.id);
+            if (session && session.listener) {
+                connection.receiver.speaking.off('start', session.listener);
+            }
+            global.recordingSessions.delete(guild.id);
+
+            // Give streams a moment to close
             await new Promise(r => setTimeout(r, 1000));
 
             const recPath = path.join(__dirname, '..', '..', '..', 'recordings');
             connection.destroy();
 
-            // Wait another moment for file locks to release
+            // Wait for locks
             await new Promise(r => setTimeout(r, 500));
 
             try {
@@ -106,13 +126,14 @@ module.exports = {
                 if (files.length === 0) return interaction.followUp('No audio captured.');
 
                 const uploadedFiles = [];
+                let totalSize = 0;
+                const MAX_SIZE = 8 * 1024 * 1024; // 8MB safety limit for standard discord
 
                 for (const file of files) {
                     const pcmPath = path.join(recPath, file);
                     const wavPath = pcmPath.replace('.pcm', '.wav');
 
                     try {
-                        // Convert PCM to WAV (add header)
                         const pcmData = fs.readFileSync(pcmPath);
                         if (pcmData.length === 0) {
                             fs.unlinkSync(pcmPath);
@@ -123,32 +144,33 @@ module.exports = {
                         const wavData = Buffer.concat([wavHeader, pcmData]);
                         fs.writeFileSync(wavPath, wavData);
 
-                        uploadedFiles.push(wavPath);
+                        const stat = fs.statSync(wavPath);
+                        if ((totalSize + stat.size) < MAX_SIZE) {
+                            uploadedFiles.push(wavPath);
+                            totalSize += stat.size;
+                        } else {
+                            // Too big to upload all
+                            fs.unlinkSync(wavPath); // Delete if we can't upload to save space (or keep it?) - let's delete to be clean
+                        }
 
-                        // Delete raw PCM
                         fs.unlinkSync(pcmPath);
                     } catch (err) {
                         console.error(`Error processing ${file}:`, err);
                     }
                 }
 
-                // Upload files
                 if (uploadedFiles.length > 0) {
                     await interaction.channel.send({
-                        content: `📁 **Voice Recordings** (${uploadedFiles.length})`,
+                        content: `📁 **Voice Recordings** (${uploadedFiles.length})\n*Some files may be omitted if total size exceeds Discord limits.*`,
                         files: uploadedFiles
                     });
 
-                    // Cleanup WAVs after upload (wait a bit to ensure upload read them)
-                    // Actually discord.js reads into memory or streams, so deleting immediately is risky if async?
-                    // But we used file path, so it's a stream. Usually safe to delete AFTER the promise resolves.
-                    // The send is awaited above.
-
+                    // Cleanup
                     uploadedFiles.forEach(f => {
-                        try { fs.unlinkSync(f); } catch (e) { console.error('Cleanup error', e); }
+                        try { fs.unlinkSync(f); } catch (e) { }
                     });
                 } else {
-                    interaction.followUp('Failed to process recordings (empty files?).');
+                    interaction.followUp('No audio files (or files too large/empty).');
                 }
 
             } catch (e) {
